@@ -1,5 +1,4 @@
 use serde_derive::{Deserialize, Serialize};
-use std::ops::Index;
 use std::{cell::RefCell, rc::Rc};
 
 extern crate serde;
@@ -46,6 +45,7 @@ pub struct Node {
     pub tag: Option<String>,
     pub children: Ref,
     pub close_tag: Option<bool>,
+    pub self_close: Option<bool>,
     pub attrs: Option<Vec<Attr>>,
 }
 
@@ -64,7 +64,7 @@ pub fn run(f: &String) -> Result<(), Box<dyn std::error::Error>> {
     for item in f.chars() {
         file.push(String::from(item));
     }
-    
+
     let mut index = 0;
     let root = Node {
         r#type: generate_str("root"),
@@ -72,6 +72,7 @@ pub fn run(f: &String) -> Result<(), Box<dyn std::error::Error>> {
         content: None,
         index: 0,
         close_tag: None,
+        self_close: None,
         tag: None,
         attrs: None,
     };
@@ -103,7 +104,9 @@ pub fn run(f: &String) -> Result<(), Box<dyn std::error::Error>> {
                 .children
                 .borrow_mut()
                 .push(rc_token.clone());
-            if rc_token.borrow().r#type == String::from("node") {
+            if rc_token.borrow().r#type == String::from("node")
+                && rc_token.borrow().self_close == Some(false)
+            {
                 // 如果是标签节点，则放入栈中
                 stack.push(rc_token.clone());
             }
@@ -121,10 +124,13 @@ pub fn lexer(
     file: &Vec<String>,
 ) -> Result<Node, Box<dyn std::error::Error>> {
     fn is_end(file: &Vec<String>, index: usize) -> bool {
-        return file.len() <= index;
+        return file.len() - 1 <= index;
     }
 
-    fn is_comment_end(hanlder:&Vec<String>, index: usize) -> Result<bool, Box<dyn std::error::Error>> {
+    fn is_comment_end(
+        hanlder: &Vec<String>,
+        index: usize,
+    ) -> Result<bool, Box<dyn std::error::Error>> {
         let mut count = index;
         let target = String::from("-->");
         let mut sour = String::from("");
@@ -155,6 +161,7 @@ pub fn lexer(
                 tag: Some(tag),
                 index: index as u32,
                 close_tag: Some(true),
+                self_close: Some(false),
                 content: None,
                 children: Rc::new(RefCell::new(vec![])),
                 attrs: None,
@@ -165,11 +172,14 @@ pub fn lexer(
                 .get(index..index + 1)
                 .ok_or("comment content start err")?;
             let mut count = 2;
+            let cache_index = index;
             while count != 0 {
                 // <!--
                 if cur[0] != String::from("-") {
                     // console.assert("fail")
-                    println!("fail");
+                    // println!("fail");
+                    index = cache_index;
+                    break;
                 }
                 index += 1;
                 cur = file
@@ -177,6 +187,46 @@ pub fn lexer(
                     .ok_or("comment content inner err")?;
                 count -= 1;
             }
+            // DOCTYPE
+            let doctype = String::from("DOCTYPE");
+            let doc = file.get(index..index + doctype.len()).ok_or("DOCTYPE err")?;
+            let temp_doc = String::from(doc.join(""));
+            // println!("{:?}", doc);
+            // println!("{:?}", temp_doc);
+            if temp_doc == doctype && !is_end(&file, index) {
+                index += doctype.len();// 跳过DOCTYPE
+                cur = file
+                    .get(index..index + 1)
+                    .ok_or("DOCTYPE content inner err")?;
+                while cur[0] == String::from(" ") {
+                    index += 1;
+                    cur = file
+                        .get(index..index + 1)
+                        .ok_or("DOCTYPE content inner err")?;
+                }
+                cur = file
+                    .get(index..index + 1)
+                    .ok_or("DOCTYPE content inner err")?;
+                let mut content = String::from("");
+                while cur[0] != String::from(">") {
+                    content += &cur[0];
+                    index += 1;
+                    cur = file
+                        .get(index..index + 1)
+                        .ok_or("DOCTYPE content inner err")?;
+                }
+                return Ok(Node {
+                    r#type: String::from("DOCTYPE"),
+                    tag: None,
+                    index: index as u32,
+                    close_tag: None,
+                    self_close: None,
+                    content: Some(content),
+                    children: Rc::new(RefCell::new(vec![])),
+                    attrs: None,
+                });
+            }
+
             // -->结束
             let mut content = String::from("");
             cur = file
@@ -199,6 +249,7 @@ pub fn lexer(
                         tag: None,
                         index: index as u32,
                         close_tag: None,
+                        self_close: None,
                         content: None,
                         children: Rc::new(RefCell::new(vec![])),
                         attrs: None,
@@ -216,6 +267,7 @@ pub fn lexer(
                 tag: None,
                 index: index as u32,
                 close_tag: None,
+                self_close: None,
                 content: Some(content),
                 children: Rc::new(RefCell::new(vec![])),
                 attrs: None,
@@ -224,13 +276,17 @@ pub fn lexer(
             // <
             let mut tag = String::from("");
             let mut cur = file.get(index..index + 1).ok_or("< tag err")?;
-            while cur[0] != String::from(" ") && cur[0] != String::from(">") && !is_end(&file, index) {
+            while cur[0] != String::from(" ")
+                && cur[0] != String::from(">")
+                && !is_end(&file, index)
+            {
                 tag += &cur[0];
                 index += 1;
                 cur = file.get(index..index + 1).ok_or("after attrs err")?;
             }
             let mut attrs: Vec<Attr> = vec![];
             if cur[0] == String::from(" ") {
+                // 删除空格
                 while file.get(index..index + 1).ok_or("inner attrs err")?[0] == String::from(" ") {
                     index += 1;
                 }
@@ -238,6 +294,7 @@ pub fn lexer(
                 let mut value = String::from("");
                 cur = file.get(index..index + 1).ok_or("attrs start err")?;
                 while cur[0] != String::from(">") && !is_end(&file, index) {
+                    // 删除空格
                     if cur[0] == String::from(" ") && cur[0] != String::from(">") {
                         while file.get(index..index + 1).ok_or("attrs blank err")?[0]
                             == String::from(" ")
@@ -246,7 +303,7 @@ pub fn lexer(
                             cur = file.get(index..index + 1).ok_or("attrs blank inner err")?;
                         }
                     }
-                    if cur[0] != String::from("=") && cur[0] != String::from(">") {
+                    if cur[0] != String::from("=") && cur[0] != String::from(">") && cur[0] != String::from("/") {
                         key += &cur[0];
                     } else if cur[0] == String::from("=") && cur[0] != String::from(">") {
                         index += 1;
@@ -268,7 +325,24 @@ pub fn lexer(
                         key = String::from("");
                         value = String::from("");
                         index -= 1;
+                    } else if cur[0] == String::from("/") {
+                        index += 1;
+                        cur = file.get(index..index + 1).ok_or("/ inner err")?;
+                        if cur[0] == String::from(">") {
+                            // <xx />
+                            return Ok(Node {
+                                r#type: String::from("node"),
+                                tag: Some(tag),
+                                index: index as u32,
+                                close_tag: None,
+                                self_close: Some(true),
+                                content: None,
+                                children: Rc::new(RefCell::new(vec![])),
+                                attrs: Some(attrs),
+                            });
+                        }
                     } else if cur[0] == String::from(">") {
+                        // 这里没加1
                         break;
                     }
                     index += 1;
@@ -281,8 +355,6 @@ pub fn lexer(
                 cur = file.get(index..index + 1).ok_or("blank inner err")?;
             }
             index += 1; // >
-            let temp = file.index(index);
-            println!("{}", temp);
             if file.get(index..index + 1).ok_or("<xx></xx> err")?[0] == String::from("<") {
                 // <xx></xx>
                 index += 1;
@@ -293,6 +365,7 @@ pub fn lexer(
                 tag: Some(tag),
                 index: index as u32,
                 close_tag: None,
+                self_close: Some(false),
                 content: None,
                 children: Rc::new(RefCell::new(vec![])),
                 attrs: Some(attrs),
@@ -308,6 +381,7 @@ pub fn lexer(
                 tag: None,
                 index: index as u32,
                 close_tag: None,
+                self_close: None,
                 content: None,
                 children: Rc::new(RefCell::new(vec![])),
                 attrs: None,
@@ -325,6 +399,7 @@ pub fn lexer(
                     tag: None,
                     index: index as u32,
                     close_tag: None,
+                    self_close: None,
                     content: None,
                     children: Rc::new(RefCell::new(vec![])),
                     attrs: None,
@@ -338,6 +413,7 @@ pub fn lexer(
             tag: None,
             index: index as u32,
             close_tag: None,
+            self_close: None,
             content: Some(content),
             children: Rc::new(RefCell::new(vec![])),
             attrs: None,
@@ -357,6 +433,7 @@ pub fn lexer(
                     tag: None,
                     index: index as u32,
                     close_tag: None,
+                    self_close: None,
                     content: None,
                     children: Rc::new(RefCell::new(vec![])),
                     attrs: None,
@@ -370,6 +447,7 @@ pub fn lexer(
             tag: None,
             index: index as u32,
             close_tag: None,
+            self_close: None,
             content: Some(content),
             children: Rc::new(RefCell::new(vec![])),
             attrs: None,
