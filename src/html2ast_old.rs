@@ -60,7 +60,7 @@ pub fn generate_str(str: &str) -> String {
 }
 
 pub fn run(f: &String) -> Result<(), Box<dyn std::error::Error>> {
-    let mut file: Vec<String> = vec![];
+    let file: Vec<String> = vec![];
     for item in f.chars() {
         file.push(String::from(item));
     }
@@ -80,7 +80,7 @@ pub fn run(f: &String) -> Result<(), Box<dyn std::error::Error>> {
 
     while index < file.len() {
         let item = file.get(index..index + 1).ok_or("start err")?;
-        let token = lexer(&item[0], index, &file)?;
+        let token = lexer(item, index, file)?;
         let rc_token = Rc::new(RefCell::new(token));
         // println!("{:?}", rc_token.clone());
         index = rc_token.borrow().index as usize;
@@ -116,36 +116,36 @@ pub fn run(f: &String) -> Result<(), Box<dyn std::error::Error>> {
 }
 
 pub fn lexer(
-    item: &String,
+    item: &str,
     mut index: usize,
-    file: &Vec<String>,
+    file: &String,
 ) -> Result<Node, Box<dyn std::error::Error>> {
-    fn is_end(file: &Vec<String>, index: usize) -> bool {
+    fn is_end(file: &String, index: usize) -> bool {
         return file.len() <= index;
     }
 
-    fn is_comment_end(hanlder:&Vec<String>, index: usize) -> Result<bool, Box<dyn std::error::Error>> {
+    fn is_comment_end(hanlder: &String, index: usize) -> Result<bool, Box<dyn std::error::Error>> {
         let mut count = index;
         let target = String::from("-->");
         let mut sour = String::from("");
         while count < index + 3 {
-            sour += &hanlder.get(count..count + 1).ok_or("is_comment_end err")?[0];
+            sour += hanlder.get(count..count + 1).ok_or("is_comment_end err")?;
             count += 1;
         }
         Ok(target == sour)
     }
 
-    if *item == String::from("<") {
+    if item == String::from("<") {
         // <
         index += 1;
-        if file.get(index..index + 1).ok_or("< err")?[0] == String::from("/") {
+        if file.get(index..index + 1).ok_or("< err")? == String::from("/") {
             // </
             index += 1;
             let mut tag = String::from("");
             let mut cur = file.get(index..index + 1).ok_or("</ err")?;
-            while cur[0] != String::from(">") && !is_end(&file, index) {
+            while cur != String::from(">") && !is_end(&file, index) {
                 // </xx>
-                tag += &cur[0];
+                tag += cur;
                 index += 1;
                 cur = file.get(index..index + 1).ok_or("</xx> err")?;
             }
@@ -159,7 +159,7 @@ pub fn lexer(
                 children: Rc::new(RefCell::new(vec![])),
                 attrs: None,
             });
-        } else if file.get(index..index + 1).ok_or("comment ! err")?[0] == String::from("!") {
+        } else if file.get(index..index + 1).ok_or("comment ! err")? == String::from("!") {
             index += 1;
             let mut cur = file
                 .get(index..index + 1)
@@ -167,7 +167,7 @@ pub fn lexer(
             let mut count = 2;
             while count != 0 {
                 // <!--
-                if cur[0] != String::from("-") {
+                if cur != String::from("-") {
                     // console.assert("fail")
                     println!("fail");
                 }
@@ -190,7 +190,7 @@ pub fn lexer(
                 if is_c_end {
                     break;
                 }
-                content += &cur[0];
+                content += cur;
                 index += 1;
                 end = is_end(&file, index);
                 if end {
@@ -224,42 +224,42 @@ pub fn lexer(
             // <
             let mut tag = String::from("");
             let mut cur = file.get(index..index + 1).ok_or("< tag err")?;
-            while cur[0] != String::from(" ") && cur[0] != String::from(">") && !is_end(&file, index) {
-                tag += &cur[0];
+            while cur != String::from(" ") && cur != String::from(">") && !is_end(&file, index) {
+                tag += cur;
                 index += 1;
                 cur = file.get(index..index + 1).ok_or("after attrs err")?;
             }
             let mut attrs: Vec<Attr> = vec![];
-            if cur[0] == String::from(" ") {
-                while file.get(index..index + 1).ok_or("inner attrs err")?[0] == String::from(" ") {
+            if cur == String::from(" ") {
+                while file.get(index..index + 1).ok_or("inner attrs err")? == String::from(" ") {
                     index += 1;
                 }
                 let mut key = String::from("");
                 let mut value = String::from("");
                 cur = file.get(index..index + 1).ok_or("attrs start err")?;
-                while cur[0] != String::from(">") && !is_end(&file, index) {
-                    if cur[0] == String::from(" ") && cur[0] != String::from(">") {
-                        while file.get(index..index + 1).ok_or("attrs blank err")?[0]
+                while cur != String::from(">") && !is_end(&file, index) {
+                    if cur == String::from(" ") && cur != String::from(">") {
+                        while file.get(index..index + 1).ok_or("attrs blank err")?
                             == String::from(" ")
                         {
                             index += 1;
                             cur = file.get(index..index + 1).ok_or("attrs blank inner err")?;
                         }
                     }
-                    if cur[0] != String::from("=") && cur[0] != String::from(">") {
-                        key += &cur[0];
-                    } else if cur[0] == String::from("=") && cur[0] != String::from(">") {
+                    if cur != String::from("=") && cur != String::from(">") {
+                        key += cur;
+                    } else if cur == String::from("=") && cur != String::from(">") {
                         index += 1;
                         cur = file.get(index..index + 1).ok_or("attrs start value err")?;
-                        while cur[0] != String::from(" ")
+                        while cur != String::from(" ")
                             && !is_end(&file, index)
-                            && cur[0] != String::from(">")
+                            && cur != String::from(">")
                         {
-                            if cur[0] == String::from('"') {
+                            if cur == String::from('"') {
                                 index += 1;
                                 cur = file.get(index..index + 1).ok_or("quote start err")?;
                             } else {
-                                value += &cur[0];
+                                value += cur;
                                 index += 1;
                                 cur = file.get(index..index + 1).ok_or("quote inner err")?;
                             }
@@ -268,7 +268,7 @@ pub fn lexer(
                         key = String::from("");
                         value = String::from("");
                         index -= 1;
-                    } else if cur[0] == String::from(">") {
+                    } else if cur == String::from(">") {
                         break;
                     }
                     index += 1;
@@ -276,14 +276,14 @@ pub fn lexer(
                 }
             }
             cur = file.get(index..index + 1).ok_or("blank start err")?;
-            while cur[0] != String::from(">") && !is_end(&file, index) {
+            while cur != String::from(">") && !is_end(&file, index) {
                 index += 1;
                 cur = file.get(index..index + 1).ok_or("blank inner err")?;
             }
             index += 1; // >
             let temp = file.index(index);
             println!("{}", temp);
-            if file.get(index..index + 1).ok_or("<xx></xx> err")?[0] == String::from("<") {
+            if file.get(index..index + 1).ok_or("<xx></xx> err")? == String::from("<") {
                 // <xx></xx>
                 index += 1;
             }
@@ -298,7 +298,7 @@ pub fn lexer(
                 attrs: Some(attrs),
             });
         }
-    } else if *item == String::from(">") {
+    } else if item == String::from(">") {
         // >
         index += 1;
         let mut content = String::from("");
@@ -315,8 +315,8 @@ pub fn lexer(
         }
         let mut cur = file.get(index..index + 1).ok_or("> err")?;
         let mut end = is_end(&file, index);
-        while cur[0] != String::from("<") && !end {
-            content += &cur[0];
+        while cur != String::from("<") && !end {
+            content += cur;
             index += 1;
             end = is_end(&file, index);
             if end {
@@ -347,8 +347,8 @@ pub fn lexer(
         let mut content = String::from("");
         let mut cur = file.get(index..index + 1).ok_or("content start err")?;
         let mut end = false;
-        while cur[0] != String::from("<") && !end {
-            content += &cur[0];
+        while cur != String::from("<") && !end {
+            content += cur;
             index += 1;
             end = is_end(&file, index);
             if end {
