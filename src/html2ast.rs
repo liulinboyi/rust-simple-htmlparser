@@ -90,7 +90,7 @@ pub fn run(f: &String) -> Result<(), Box<dyn std::error::Error>> {
             // println!("{:?}", stack[0]);
             let serialized = serde_json::to_string(&stack[0]).unwrap();
             println!("serialized = {}", serialized);
-            std::fs::write("json/res.json", serialized)?;
+            std::fs::write("res.json", serialized)?;
             break;
         }
         if rc_token.borrow().close_tag == Some(false) || rc_token.borrow().close_tag == None {
