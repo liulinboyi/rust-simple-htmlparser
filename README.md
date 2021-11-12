@@ -8,6 +8,15 @@
 
 - [JavaScript](https://github.com/liulinboyi/simple-htmlparser)
 
+## htmlparser-benchmark
+
+https://github.com/AndreasMadsen/htmlparser-benchmark
+
+```
+File count is 258 ,Average parsing time per file is 0.8527131782945736ms,All time is 220ms
+```
+![](./image/benchmark.png)
+
 ```
 
 
