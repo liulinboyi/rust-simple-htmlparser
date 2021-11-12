@@ -8,6 +8,17 @@
 
 - [JavaScript](https://github.com/liulinboyi/simple-htmlparser)
 
+### Benchmark对比在[dev分支](https://github.com/liulinboyi/rust-simple-htmlparser/tree/dev)
+
+## htmlparser-benchmark
+
+https://github.com/AndreasMadsen/htmlparser-benchmark
+
+```
+File count is 258 ,Average parsing time per file is 0.8527131782945736ms,All time is 220ms
+```
+![](./image/benchmark.png)
+
 ```
 
 
